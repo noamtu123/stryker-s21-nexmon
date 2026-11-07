@@ -134,6 +134,7 @@
     <string name="next">Next</string>
     <string name="pcheck_switch_rootless">Use rootless instead</string>
     <string name="pcheck_no_root">Root required</string>
+    <string name="pcheck_recheck_root">Re-check for root</string>
     <string name="not">❌</string>
     <string name="done">Done</string>
     <string name="unhandled_exception">An unhandled exception!</string>

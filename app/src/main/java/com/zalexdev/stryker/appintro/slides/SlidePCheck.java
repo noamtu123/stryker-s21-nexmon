@@ -60,6 +60,8 @@ public class SlidePCheck extends Fragment implements IntroPage {
 
     private boolean checked = false;
     private boolean switchToRootless = false;
+    // su binary exists (a root manager is installed) even if it did not grant us root yet
+    private volatile boolean suPresent = false;
 
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
@@ -98,7 +100,10 @@ public class SlidePCheck extends Fragment implements IntroPage {
         rowSpace = view.findViewById(R.id.row_space);
 
 
-        if (core.getBoolean(PREF_CHECKED)) {
+        // Only short-circuit on a cached POSITIVE. A cached "no root" must never
+        // stick: on KernelSU/APatch the user may have granted us since, so fall
+        // through and let onResume() re-run the check.
+        if (core.getBoolean(PREF_CHECKED) && core.getBoolean(PREF_ROOT)) {
             restoreResults();
         }
         return view;
@@ -122,6 +127,7 @@ public class SlidePCheck extends Fragment implements IntroPage {
         } catch (NumberFormatException ignored) {
         }
         boolean spaceOk = core.getBoolean(PREF_SPACE) && freeGb >= REQUIRED_FREE_GB;
+        suPresent = rootOk; // restore is only reached on a cached positive
 
         progressIndicator.setVisibility(View.GONE);
         cardView.setVisibility(View.VISIBLE);
@@ -135,8 +141,11 @@ public class SlidePCheck extends Fragment implements IntroPage {
     }
 
     private void applyGate(boolean rootOk) {
-        switchToRootless = !rootOk && EngineType.rootlessSupported(context);
-        gateReady = rootOk || switchToRootless;
+        // Only fall back to rootless when there is no root solution at all. If a
+        // root manager IS installed (su present) but has not granted us yet, keep
+        // the user on the rooted path and let them grant + Re-check.
+        switchToRootless = !rootOk && !suPresent && EngineType.rootlessSupported(context);
+        gateReady = rootOk;
         refreshChrome();
     }
 
@@ -151,7 +160,9 @@ public class SlidePCheck extends Fragment implements IntroPage {
         boolean deviceOk = manufactOk && archOk;
 
         applyRow(rootOk, rowRoot, rootSub,
-                "No su — install Magisk or another root manager");
+                suPresent
+                        ? "Root manager found, but Stryker isn't allowed yet. Open it (Magisk / KernelSU / APatch), grant Stryker root, then tap Re-check."
+                        : "No su — install Magisk, KernelSU or another root manager");
         applyRow(monFinal, rowMonitor, monMode,
                 "Monitor mode unlikely — capture and handshake tools may fail");
         applyRow(usbOk, rowUsb, usbOtg,
@@ -189,6 +200,8 @@ public class SlidePCheck extends Fragment implements IntroPage {
 
         new Thread(() -> {
             boolean rootOk = core.checkRoot();
+            // su binary spawned (manager installed) even if it denied us
+            suPresent = rootOk || !core.suSpawnFailed();
             if (cancelled.get()) return;
             boolean usbOk = context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_USB_HOST);
 
@@ -257,29 +270,33 @@ public class SlidePCheck extends Fragment implements IntroPage {
     public CharSequence primaryLabel(Context context) {
         if (running) return context.getString(R.string.pcheck_running);
         if (!checked) return context.getString(R.string.pcheck_run);
+        if (gateReady) return context.getString(R.string.intro_action_next);
         if (switchToRootless) return context.getString(R.string.pcheck_switch_rootless);
-        return context.getString(gateReady
-                ? R.string.intro_action_next : R.string.pcheck_no_root);
+        // root denied but a manager is installed: let the user grant then Re-check
+        if (suPresent) return context.getString(R.string.pcheck_recheck_root);
+        return context.getString(R.string.pcheck_no_root);
     }
 
     @Override
     public boolean primaryEnabled() {
         if (running) return false;
         if (!checked) return true;
-        return gateReady;
+        // enabled to advance (root ok), to switch to rootless, or to Re-check a grant
+        return gateReady || switchToRootless || suPresent;
     }
 
     @Override
     public void onPrimary() {
-        if (switchToRootless) {
+        if (!gateReady && switchToRootless) {
             EngineType.persist(core, EngineType.ROOTLESS);
             ((AppIntroActivity) activity).applyEngineFlow(EngineType.ROOTLESS);
             return;
         }
-        if (checked) {
+        if (gateReady && checked) {
             core.moveNext(mPager);
             return;
         }
+        // not checked yet, or manager present but not granted -> (re)run the check
         runCheck();
     }
 }
