@@ -1479,9 +1479,13 @@ public class Core {
      */
     public String wpsCommand(String iface, String mac, String mode, String extra){
         if ("ose".equals(wpsEngine())){
+            // -k: OneShot-Extended drives managed wpa_supplicant, so it must
+            // evict Android's wificond, which survives `svc wifi disable` and
+            // otherwise blocks association. The app re-enables Wi-Fi afterwards,
+            // which respawns wificond.
             StringBuilder b = new StringBuilder("NO_COLOR=1 python3 -u ")
                     .append(OSE_DIR).append("/ose.py -i ").append(iface)
-                    .append(" -b ").append(mac);
+                    .append(" -b ").append(mac).append(" -k");
             switch (mode){
                 case "pixie":      b.append(" -P -F"); break;
                 case "bruteforce": b.append(" -B"); break;
