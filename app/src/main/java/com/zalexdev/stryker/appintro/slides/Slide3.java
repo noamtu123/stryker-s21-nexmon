@@ -210,13 +210,18 @@ public class Slide3 extends Fragment implements IntroPage {
                     core.deleteFile("/sdcard/Stryker/exploits/");
                     core.copyFile("/data/data/com.zalexdev.stryker.devicefork/files/checker.py",
                             "/data/local/stryker-devicefork/release/exploits/checker.py");
-                    // Deploy OneShot-Extended into the chroot (/CORE/OSE) for the
-                    // optional WPS engine. Idempotent; refreshed on every update.
+                    // Deploy the optional WPS/HS engines into the chroot:
+                    // OneShot-Extended (/CORE/OSE) and wifite (/CORE/Wifite).
+                    // Idempotent; refreshed on every update.
                     core.copyFile("/data/data/com.zalexdev.stryker.devicefork/files/ose.tar",
                             "/data/local/stryker-devicefork/release/exploits/ose.tar");
+                    core.copyFile("/data/data/com.zalexdev.stryker.devicefork/files/wifite.tar",
+                            "/data/local/stryker-devicefork/release/exploits/wifite.tar");
                     core.customChrootCommand("rm -rf /CORE/OSE && mkdir -p /CORE/OSE && "
                             + "tar xf /exploits/ose.tar -C /CORE/OSE && rm -f /exploits/ose.tar && "
-                            + "chmod +x /CORE/OSE/ose.py");
+                            + "chmod +x /CORE/OSE/ose.py; "
+                            + "rm -rf /CORE/Wifite && mkdir -p /CORE/Wifite && "
+                            + "tar xf /exploits/wifite.tar -C /CORE/Wifite && rm -f /exploits/wifite.tar");
                     core.copyFile("/data/local/stryker-devicefork/release/exploits/", "/sdcard/Stryker/exploits");
                     core.chmodFolder("/data/data/com.zalexdev.stryker.devicefork/files");
                     markStage(InstallStage.DEPLOYING_EXPLOITS, RowState.DONE);
