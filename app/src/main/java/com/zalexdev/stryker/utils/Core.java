@@ -1455,6 +1455,66 @@ public class Core {
         return isPixieIfaceDown() ? " --iface-down" : "";
     }
 
+    /** OneShot-Extended install dir inside the chroot (bundled asset ose.tar). */
+    public static final String OSE_DIR = "/CORE/OSE";
+
+    /** WPS engine: "hybrid" = device-tuned pixie.py (default, verified),
+     *  "ose" = stock OneShot-Extended (works natively via the kernel monitor). */
+    public String wpsEngine(){
+        String v = getString("wps_engine");
+        return (v == null || v.isEmpty()) ? "hybrid" : v;
+    }
+
+    /**
+     * Build the WPS-engine command line run inside the chroot.
+     * mode: "pixie" (pixie-dust) | "bruteforce" | "nullpin" | "pin".
+     * extra: the PIN for mode "pin"; ignored otherwise.
+     *
+     * The "hybrid" branch reproduces the existing, device-tuned pixie.py
+     * invocations byte-for-byte (so selecting it changes nothing). The "ose"
+     * branch runs OneShot-Extended, whose CLI differs (-P for pixie-dust) and
+     * which manages the radio itself through the Floppy-kernel native monitor,
+     * so it takes no --iface-down flag. NO_COLOR keeps its output ANSI-free for
+     * the parser.
+     */
+    public String wpsCommand(String iface, String mac, String mode, String extra){
+        if ("ose".equals(wpsEngine())){
+            StringBuilder b = new StringBuilder("NO_COLOR=1 python3 -u ")
+                    .append(OSE_DIR).append("/ose.py -i ").append(iface)
+                    .append(" -b ").append(mac);
+            switch (mode){
+                case "pixie":      b.append(" -P -F"); break;
+                case "bruteforce": b.append(" -B"); break;
+                case "nullpin":    b.append(" -N"); break;
+                case "pin":        b.append(" -p ").append(extra); break;
+                default: break;
+            }
+            return b.toString();
+        }
+        StringBuilder b = new StringBuilder("python3 -u /CORE/PixieWps/pixie.py -i ").append(iface);
+        switch (mode){
+            case "pixie":      b.append(wpsIfaceDownFlag()).append(" -K -F"); break;
+            case "bruteforce": b.append(" -B"); break;
+            case "nullpin":    b.append(wpsIfaceDownFlag()).append(" -N"); break;
+            case "pin":        b.append(wpsIfaceDownFlag()).append(" -p ").append(extra); break;
+            default: break;
+        }
+        b.append(" -b ").append(mac);
+        return b.toString();
+    }
+
+    /** True when the selected WPS engine is OneShot-Extended. */
+    public boolean wpsEngineIsOse(){ return "ose".equals(wpsEngine()); }
+
+    private static final java.util.regex.Pattern ANSI =
+            java.util.regex.Pattern.compile("\\x1b\\[[0-9;?]*[ -/]*[@-~]");
+
+    /** Strip ANSI/VT100 escape sequences so output parsers are colour-agnostic. */
+    public static String stripAnsi(String s){
+        if (s == null || s.indexOf('\u001b') < 0) return s;
+        return ANSI.matcher(s).replaceAll("");
+    }
+
     public void wpsDisableWifiIfEnabled(){
         if (isRootless()) return;
         if (isPixieIfaceDown()) customCommand("svc wifi disable");

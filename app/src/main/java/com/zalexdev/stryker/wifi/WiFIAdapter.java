@@ -557,8 +557,7 @@ public class WiFIAdapter extends RecyclerView.Adapter<WiFIAdapter.ViewHolder> {
         if (type == 1){
             final int[] scanCount = {0};
             monitor.stage(AttackStage.RADIO, AttackStage.State.ACTIVE, "Taking the radio off Android");
-            String cmd = "python3 -u /CORE/PixieWps/pixie.py -i " + core.getWPSInterface()
-                    + core.wpsIfaceDownFlag() + " -K -F -b " + network.getMac();
+            String cmd = core.wpsCommand(core.getWPSInterface(), network.getMac(), "pixie", null);
             new Thread(core::wpsDisableWifiIfEnabled, "wps-radio-off").start();
             pixie = new AdvancedProcess(activity, context, cmd, true) {
                 @Override
@@ -1024,9 +1023,9 @@ public class WiFIAdapter extends RecyclerView.Adapter<WiFIAdapter.ViewHolder> {
 
         }
         else if (type == 4){
-            String cmd = "python3 -u /CORE/PixieWps/pixie.py -i " + core.getWPSInterface() + " -B -b " + network.getMac();
+            String cmd = core.wpsCommand(core.getWPSInterface(), network.getMac(), "bruteforce", null);
             String resume = core.getString(network.getMac()+"_pin");
-            if (resume.length() > 0){
+            if (resume.length() > 0 && !core.wpsEngineIsOse()){
                 cmd = cmd + " -p " + resume;
                 monitor.note("Restoring progress: " + resume);
                 monitor.metric(AttackMetric.PIN, resume);
@@ -1070,8 +1069,7 @@ public class WiFIAdapter extends RecyclerView.Adapter<WiFIAdapter.ViewHolder> {
             monitor.note(context.getResources().getString(R.string.wifi_null_pin_running));
             monitor.stage(AttackStage.RADIO, AttackStage.State.ACTIVE, "Taking the radio off Android");
             new Thread(core::wpsDisableWifiIfEnabled, "wps-radio-off").start();
-            String cmd = "python3 -u /CORE/PixieWps/pixie.py -i " + core.getWPSInterface()
-                    + core.wpsIfaceDownFlag() + " -N -b " + network.getMac();
+            String cmd = core.wpsCommand(core.getWPSInterface(), network.getMac(), "nullpin", null);
             oneshot = new AdvancedProcess(activity, context, cmd, true) {
                 @Override
                 public void onFinished(ArrayList<String> outputList) {
@@ -1130,7 +1128,7 @@ public class WiFIAdapter extends RecyclerView.Adapter<WiFIAdapter.ViewHolder> {
                         monitor.stage(AttackStage.RADIO, AttackStage.State.ACTIVE);
 
                           core.wpsDisableWifiIfEnabled();
-                          String cmd = "python3 -u /CORE/PixieWps/pixie.py -i " + core.getWPSInterface() + core.wpsIfaceDownFlag() + " -p "+ pin[0] +" -b " + network.getMac();
+                          String cmd = core.wpsCommand(core.getWPSInterface(), network.getMac(), "pin", pin[0]);
                           oneshot = new AdvancedProcess(activity, context, cmd, true) {
                               @Override
                               public void onFinished(ArrayList<String> outputList) {
@@ -1266,7 +1264,7 @@ public class WiFIAdapter extends RecyclerView.Adapter<WiFIAdapter.ViewHolder> {
                                                     monitor.metric(AttackMetric.PIN, pin);
                                                     monitor.metric(AttackMetric.PROGRESS, index + " / " + pins.size());
                                                     monitor.metric(AttackMetric.LEFT, pin_count[0]);
-                                                    String cmd = "python3 -u /CORE/PixieWps/pixie.py -i " + scaninterface + core.wpsIfaceDownFlag() + " -p "+pin+" -b " + network.getMac();
+                                                    String cmd = core.wpsCommand(scaninterface, network.getMac(), "pin", pin);
                                                     final ArrayList<String> pinOutput = new ArrayList<>();
                                                     brutepin = new AdvancedProcess(activity, app, cmd, true) {
                                                         @Override
@@ -1315,7 +1313,7 @@ public class WiFIAdapter extends RecyclerView.Adapter<WiFIAdapter.ViewHolder> {
                                     monitor.metric(AttackMetric.PROGRESS, "1 / 1");
                                     monitor.note("Trying pin " + pins.get(i-1));
 
-                                    String cmd = "python3 -u /CORE/PixieWps/pixie.py -i " + core.getWPSInterface() + core.wpsIfaceDownFlag() + " -p "+ pins.get(i-1) +" -b " + network.getMac();
+                                    String cmd = core.wpsCommand(core.getWPSInterface(), network.getMac(), "pin", pins.get(i-1));
                                     oneshot = new AdvancedProcess(activity, context, cmd, true) {
                                         @Override
                                         public void onFinished(ArrayList<String> outputList) {
@@ -1719,7 +1717,7 @@ public class WiFIAdapter extends RecyclerView.Adapter<WiFIAdapter.ViewHolder> {
 
         WiFINetwork back = new WiFINetwork();
         for (int i = 0; i < out.size(); i++) {
-            String s = out.get(i);
+            String s = Core.stripAnsi(out.get(i));
             if (s.contains("[+] WPS PIN:")) {
                 pin = s.replace("[+] WPS PIN: ", "").replaceAll("'", "");
                 back.setPin(pin);
@@ -1841,7 +1839,7 @@ public class WiFIAdapter extends RecyclerView.Adapter<WiFIAdapter.ViewHolder> {
 
         WiFINetwork back = new WiFINetwork();
         for (int i = 0; i < out.size(); i++) {
-            String s = out.get(i);
+            String s = Core.stripAnsi(out.get(i));
             if (s.contains("[+] WPS pin:")) {
                 pin = s.replace("[+] WPS pin: ", "").replaceAll("'", "");
                 back.setPin(pin);

@@ -67,6 +67,8 @@ public class SettingsHomeFragment extends Fragment {
         SwitchMaterial autoBanner = view.findViewById(R.id.banner_detect);
         SwitchMaterial pixieIfaceDown = view.findViewById(R.id.pixie_iface_down_switch);
         LinearLayout pixieIfaceDownRow = view.findViewById(R.id.pixie_iface_down_row);
+        SwitchMaterial wpsOse = view.findViewById(R.id.wps_ose_switch);
+        LinearLayout wpsOseRow = view.findViewById(R.id.wps_ose_row);
         LinearLayout internalDeauthRow = view.findViewById(R.id.internal_deauth_row);
         View internalDeauthDivider = view.findViewById(R.id.internal_deauth_divider);
         SwitchMaterial internalDeauth = view.findViewById(R.id.internal_deauth_switch);
@@ -113,6 +115,9 @@ public class SettingsHomeFragment extends Fragment {
         bindRowToSwitch(autoWifiRow, autoWifi);
         bindRowToSwitch(saveApsRow, saveAps);
         bindRowToSwitch(pixieIfaceDownRow, pixieIfaceDown);
+        wpsOse.setChecked(core.wpsEngineIsOse());
+        wpsOse.setOnCheckedChangeListener((btn, b) -> core.putString("wps_engine", b ? "ose" : "hybrid"));
+        bindRowToSwitch(wpsOseRow, wpsOse);
         bindRowToSwitch(internalDeauthRow, internalDeauth);
         if (core.isRootless()) {
             internalDeauthRow.setVisibility(View.GONE);

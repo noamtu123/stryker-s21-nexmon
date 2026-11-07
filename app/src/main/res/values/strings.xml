@@ -168,6 +168,8 @@
     <string name="settings_change_interfaces_subtitle">Pick which adapter handles scan, handshake, deauth, WPS</string>
     <string name="settings_pixie_iface_down_title">Turn interface down</string>
     <string name="settings_pixie_iface_down_subtitle">Drop Wi-Fi and the adapter during Pixie and WPS attacks. Needed for most internal adapters; turn off for external ones that must stay up.</string>
+    <string name="settings_wps_ose_title">Use OneShot-Extended for WPS</string>
+    <string name="settings_wps_ose_subtitle">Run the stock OneShot-Extended engine for WPS attacks instead of the built-in engine. Works natively on the internal radio via the kernel monitor. Off = built-in engine (default).</string>
     <string name="settings_internal_deauth_title">Deauth with internal adapter</string>
     <string name="settings_internal_deauth_subtitle">Allow deauth on the internal radio (wlan0). Only if it supports packet injection; otherwise an external adapter is used.</string>
 
