@@ -655,6 +655,11 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         Core.extractBusybox(this);
+        // Deploy the optional WPS/HS engines (OneShot-Extended, wifite) into the
+        // chroot if they are missing. No-op on fresh installs (Slide3 handles
+        // those) and when already deployed; this covers app updates on an
+        // existing chroot.
+        try { new Core(this).ensureEngines(); } catch (Throwable ignored) {}
     }
 
     private void copyFile(InputStream in, OutputStream out) throws IOException {

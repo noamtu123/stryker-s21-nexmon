@@ -69,6 +69,8 @@ public class SettingsHomeFragment extends Fragment {
         LinearLayout pixieIfaceDownRow = view.findViewById(R.id.pixie_iface_down_row);
         SwitchMaterial wpsOse = view.findViewById(R.id.wps_ose_switch);
         LinearLayout wpsOseRow = view.findViewById(R.id.wps_ose_row);
+        SwitchMaterial hsWifite = view.findViewById(R.id.hs_wifite_switch);
+        LinearLayout hsWifiteRow = view.findViewById(R.id.hs_wifite_row);
         LinearLayout internalDeauthRow = view.findViewById(R.id.internal_deauth_row);
         View internalDeauthDivider = view.findViewById(R.id.internal_deauth_divider);
         SwitchMaterial internalDeauth = view.findViewById(R.id.internal_deauth_switch);
@@ -116,8 +118,17 @@ public class SettingsHomeFragment extends Fragment {
         bindRowToSwitch(saveApsRow, saveAps);
         bindRowToSwitch(pixieIfaceDownRow, pixieIfaceDown);
         wpsOse.setChecked(core.wpsEngineIsOse());
-        wpsOse.setOnCheckedChangeListener((btn, b) -> core.putString("wps_engine", b ? "ose" : "hybrid"));
+        wpsOse.setOnCheckedChangeListener((btn, b) -> {
+            core.putString("wps_engine", b ? "ose" : "hybrid");
+            if (b) core.ensureEngines();
+        });
         bindRowToSwitch(wpsOseRow, wpsOse);
+        hsWifite.setChecked(core.hsEngineIsWifite());
+        hsWifite.setOnCheckedChangeListener((btn, b) -> {
+            core.putString("hs_engine", b ? "wifite" : "native");
+            if (b) core.ensureEngines();
+        });
+        bindRowToSwitch(hsWifiteRow, hsWifite);
         bindRowToSwitch(internalDeauthRow, internalDeauth);
         if (core.isRootless()) {
             internalDeauthRow.setVisibility(View.GONE);

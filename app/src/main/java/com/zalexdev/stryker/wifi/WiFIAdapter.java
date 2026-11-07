@@ -83,6 +83,7 @@ public class WiFIAdapter extends RecyclerView.Adapter<WiFIAdapter.ViewHolder> {
     public volatile AdvancedThread handshake = null;
     public volatile AdvancedThread brutepsk = null;
     public volatile AdvancedProcess airodump = null;
+    public volatile AdvancedProcess wifiteProc = null;
     public Timer aireplay;
     public String pinconnect;
     public String wordlistpath;
@@ -533,6 +534,7 @@ public class WiFIAdapter extends RecyclerView.Adapter<WiFIAdapter.ViewHolder> {
             if (brutepin != null) {brutepin.kill();}
             if (deauther != null) {deauther.kill();}
             if (airodump != null) {airodump.kill();}
+            if (wifiteProc != null) {wifiteProc.kill();}
             try{
                 aireplay.cancel();
             }catch (Exception ignored){
@@ -691,6 +693,9 @@ public class WiFIAdapter extends RecyclerView.Adapter<WiFIAdapter.ViewHolder> {
                             };
                         });
 
+        }
+        else if (type == 3 && core.hsEngineIsWifite()){
+            runWifiteHandshake(network, monitor, dialogCanceled);
         }
         else if (type == 3){
 
@@ -1709,6 +1714,81 @@ public class WiFIAdapter extends RecyclerView.Adapter<WiFIAdapter.ViewHolder> {
                 core.customCommand("svc wifi enable", true);
             }
         }).start();
+    }
+
+    /**
+     * Handshake capture via wifite (opt-in HS engine). wifite runs its own
+     * airodump + deauth on the nexmon-armed wlan0 (which it accepts as a
+     * monitor interface) and writes hs/handshake_*.cap into the shared capture
+     * dir. --bssid makes it non-interactive; we watch for "Captured handshake"
+     * / "Captured PMKID", copy the cap into captured/, and disarm on finish.
+     */
+    private void runWifiteHandshake(WiFINetwork network, AttackMonitor monitor,
+                                    AtomicBoolean dialogCanceled) {
+        new Thread(() -> {
+            monitor.stage(AttackStage.MONITOR, AttackStage.State.ACTIVE, "Deploying wifite");
+            if (!core.ensureWifite()) {
+                monitor.failStage(AttackStage.MONITOR, "wifite unavailable",
+                        "wifite is not installed in the core");
+                monitor.finish(false, "wifite is not available");
+                return;
+            }
+            final String iface = core.getHSInterface();
+            final int ch = network.getChannel();
+            monitor.stage(AttackStage.MONITOR, AttackStage.State.ACTIVE, iface);
+            boolean armed = core.monitorManager.enableMonitorMode(iface, String.valueOf(ch));
+            if (!armed) {
+                monitor.failStage(AttackStage.MONITOR, "Monitor mode failed",
+                        "Could not arm " + iface);
+                monitor.finish(false, "Monitor mode failed");
+                return;
+            }
+            monitor.stage(AttackStage.MONITOR, AttackStage.State.DONE, iface);
+            monitor.stage(AttackStage.CAPTURE, AttackStage.State.ACTIVE,
+                    "wifite is attacking " + network.getMac());
+            final boolean[] got = {false};
+            final String cmd = core.wifiteHsCommand(iface, network.getMac(), ch);
+            wifiteProc = new AdvancedProcess(activity, context, cmd, true) {
+                @Override
+                public void onNewLine(String line) {
+                    String s = Core.stripAnsi(line);
+                    if (s.contains("Captured handshake") || s.contains("Captured PMKID")) {
+                        got[0] = true;
+                        kill();
+                    }
+                    monitor.note(masked(s));
+                }
+
+                @Override
+                public void onFinished(ArrayList<String> outputList) {
+                    for (String l : outputList) {
+                        String s = Core.stripAnsi(l);
+                        if (s.contains("Captured handshake") || s.contains("Captured PMKID"))
+                            got[0] = true;
+                    }
+                    new Thread(() -> {
+                        if (got[0]) {
+                            core.customChrootCommand("cp " + core.guestShare()
+                                    + "/hs/*.cap " + core.guestShare()
+                                    + "/captured/ 2>/dev/null; true", true);
+                            monitor.stage(AttackStage.CAPTURE, AttackStage.State.DONE,
+                                    "Handshake captured");
+                            monitor.finish(true, "Handshake captured\nCheck Stryker/captured/");
+                        } else if (dialogCanceled.get()) {
+                            monitor.finish(false, "Attack stopped");
+                        } else {
+                            monitor.finish(false, "Handshake not captured");
+                        }
+                        if (core.monitorManager.isMonitorModeEnabled(iface)) {
+                            core.monitorManager.disableMonitorMode(iface);
+                        }
+                    }, "stryker-wifite-hs-done").start();
+                }
+
+                @Override
+                public void onEvent(String line) { }
+            };
+        }, "stryker-wifite-hs").start();
     }
 
     public WiFINetwork issuccess(ArrayList<String> out) {

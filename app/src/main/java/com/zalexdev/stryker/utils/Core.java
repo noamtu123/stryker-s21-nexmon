@@ -1515,6 +1515,60 @@ public class Core {
         return ANSI.matcher(s).replaceAll("");
     }
 
+    /** Wifite install dir inside the chroot (bundled asset wifite.tar). */
+    public static final String WIFITE_DIR = "/CORE/Wifite";
+
+    /** Handshake capture engine: "native" (default, airodump+aireplay) or "wifite". */
+    public String hsEngine(){
+        String v = getString("hs_engine");
+        return (v == null || v.isEmpty()) ? "native" : v;
+    }
+    public boolean hsEngineIsWifite(){ return "wifite".equals(hsEngine()); }
+
+    /**
+     * Deploy a bundled chroot tool from files/<tarName> into /CORE/<coreSubdir>
+     * when it is not already present. copyAssets() gunzips assets/<tarName>.gz to
+     * files/<tarName> on launch. Idempotent and cheap when already deployed
+     * (a single file probe). Not used in rootless mode.
+     */
+    private boolean ensureChrootTool(String tarName, String coreSubdir, String markerRel){
+        if (isRootless()) return false;
+        String marker = CHROOT_ROOT + "/CORE/" + coreSubdir + "/" + markerRel;
+        if (checkFile(marker)) return true;
+        String tar = nativeTool(tarName);
+        if (!checkFile(tar)) return false;
+        copyFile(tar, CHROOT_ROOT + "/exploits/" + tarName);
+        customChrootCommand("rm -rf /CORE/" + coreSubdir + " && mkdir -p /CORE/" + coreSubdir
+                + " && tar xf /exploits/" + tarName + " -C /CORE/" + coreSubdir
+                + " && rm -f /exploits/" + tarName, true);
+        return checkFile(marker);
+    }
+
+    /** Ensure OneShot-Extended is deployed in the chroot. */
+    public boolean ensureOse(){ return ensureChrootTool("ose.tar", "OSE", "ose.py"); }
+    /** Ensure wifite is deployed in the chroot. */
+    public boolean ensureWifite(){ return ensureChrootTool("wifite.tar", "Wifite", "Wifite.py"); }
+
+    /** Background-deploy both optional engines if missing (for existing installs). */
+    public void ensureEngines(){
+        if (isRootless()) return;
+        new Thread(() -> {
+            try { ensureOse(); ensureWifite(); } catch (Exception ignored) {}
+        }, "stryker-ensure-engines").start();
+    }
+
+    /**
+     * Build the wifite handshake-capture command for the chroot. Runs in the
+     * shared capture dir so wifite writes hs/handshake_*.cap where the app reads
+     * it; --bssid makes it non-interactive, --no-wps keeps it to PMKID + the WPA
+     * 4-way handshake. COLUMNS/LINES keep its UI sane with no tty.
+     */
+    public String wifiteHsCommand(String iface, String mac, int channel){
+        String ch = channel > 0 ? " -c " + channel : "";
+        return "cd " + guestShare() + " && mkdir -p hs captured && COLUMNS=120 LINES=40 python3 "
+                + WIFITE_DIR + "/Wifite.py -i " + iface + " --bssid " + mac + ch + " --no-wps";
+    }
+
     public void wpsDisableWifiIfEnabled(){
         if (isRootless()) return;
         if (isPixieIfaceDown()) customCommand("svc wifi disable");
