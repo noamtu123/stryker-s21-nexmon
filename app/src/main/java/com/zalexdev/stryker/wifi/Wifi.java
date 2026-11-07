@@ -737,8 +737,7 @@ public class Wifi extends Fragment {
                     monitor.metric(AttackMetric.TARGET, temp.getSsid());
                     monitor.stage(AttackStage.ASSOC, AttackStage.State.ACTIVE);
 
-                    String cmd = " python3 -u /CORE/PixieWps/pixie.py -i " + core.getWPSInterface()
-                            + core.wpsIfaceDownFlag() + " -K -F -b " + temp.getMac();
+                    String cmd = core.wpsCommand(core.getWPSInterface(), temp.getMac(), "pixie", null);
                     pixie[0] = new AdvancedProcess(activity, context, cmd, true) {
                         @Override
                         public void onFinished(ArrayList<String> outputList) {
