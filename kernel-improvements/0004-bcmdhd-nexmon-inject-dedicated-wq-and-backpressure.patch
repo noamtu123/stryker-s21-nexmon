@@ -1,0 +1,120 @@
+From: noamtu123 <turkelservices@gmail.com>
+Date: Sat, 7 Nov 2026 00:00:00 +0000
+Subject: [PATCH 4/4] bcmdhd_101_16: isolate and bound the nexmon inject worker
+
+Follow-up to the nexmon-native monitor patch. Injection-path only; the
+capture, type-flip and channel-bridge paths are unchanged.
+
+- dedicated ordered workqueue (WQ_HIGHPRI) instead of system_wq:
+  dhd_nexmon_inject_work() sleeps in dhd_wl_ioctl_cmd(NEX_INJECT_FRAME)
+  once per frame. On system_wq that sleeping item is delayed by (and
+  delays) unrelated work, hurting latency for time-sensitive injection
+  (aireplay-ng deauth bursts, EAPOL replays). A single-threaded ordered
+  WQ gives injection its own FIFO context with predictable latency, and
+  falls back to system_wq if the alloc fails so it can never regress to
+  "no injection".
+
+- back-pressure: dhd_start_xmit is atomic and cannot block, so the inject
+  queue had no bound; a firmware stall (chip hang, e=-121) under an
+  aireplay flood would grow nexmon_inj_q until OOM. Cap it at
+  NEXMON_INJECT_MAX_QLEN and drop + count past it (best-effort tx).
+
+- drop the worker's self-requeue (the drain loop + per-enqueue wake make
+  it redundant, and a self-requeuing work races cancel on unload) and use
+  destroy_workqueue() for teardown (flush + cancel + free).
+
+Signed-off-by: noamtu123 <turkelservices@gmail.com>
+---
+ .../broadcom/bcmdhd_101_16/dhd_linux.c        | 46 +++++++++++++++----
+ .../broadcom/bcmdhd_101_16/dhd_linux_priv.h   |  1 +
+ 2 files changed, 38 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/net/wireless/broadcom/bcmdhd_101_16/dhd_linux.c b/drivers/net/wireless/broadcom/bcmdhd_101_16/dhd_linux.c
+--- a/drivers/net/wireless/broadcom/bcmdhd_101_16/dhd_linux.c
++++ b/drivers/net/wireless/broadcom/bcmdhd_101_16/dhd_linux.c
+@@ -165,6 +165,7 @@
+ #define NEXMON_IOCTL_INJECT_FRAME 408
+ #define NEXMON_INJECT_MAX_FRAME	4096
++#define NEXMON_INJECT_MAX_QLEN	256	/* bound backlog if firmware stalls */
+
+ struct nexmon_inject_hdr {
+ 	uint16 len;
+ 	uint8 pad;
+ 	uint8 type;
+ };
+@@ -207,9 +208,6 @@ dhd_nexmon_inject_work(struct work_struct *work)
+
+ 		dev_kfree_skb(skb);
+ 	}
+-
+-	if (skb_peek(&dhd->nexmon_inj_q))
+-		schedule_work(&dhd->nexmon_inj_w);
+ }
+
+ /*
+  * .ndo_start_xmit hook for monitor-armed interfaces: called in atomic context
+  * with skb ownership handed over. Queue + wake the inject worker above.
+  */
+ netdev_tx_t
+ dhd_nexmon_mon_tx(dhd_info_t *dhd, struct sk_buff *skb, struct net_device *net)
+ {
+-	skb_queue_tail(&dhd->nexmon_inj_q, skb);
+-	schedule_work(&dhd->nexmon_inj_w);
++	/*
++	 * Bound the backlog: dhd_start_xmit is atomic so there is no natural
++	 * back-pressure. If the firmware stalls (chip hang) while a tool
++	 * floods frames (aireplay-ng deauth), an unbounded queue grows until
++	 * OOM. Drop past the cap; nexmon injection is best-effort.
++	 */
++	if (skb_queue_len(&dhd->nexmon_inj_q) >= NEXMON_INJECT_MAX_QLEN) {
++		dev_kfree_skb_any(skb);
++		net->stats.tx_dropped++;
++		return NETDEV_TX_OK;
++	}
++	skb_queue_tail(&dhd->nexmon_inj_q, skb);
++	queue_work(dhd->nexmon_inj_wq ? dhd->nexmon_inj_wq : system_wq,
++		&dhd->nexmon_inj_w);
+ 	return NETDEV_TX_OK;
+ }
+@@ -8852,8 +8852,13 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
+ #ifdef WL_MONITOR
+ 	/* nexmon-native injection queue + worker (see dhd_nexmon_mon_tx) */
+ 	skb_queue_head_init(&dhd->nexmon_inj_q);
+ 	INIT_WORK(&dhd->nexmon_inj_w, dhd_nexmon_inject_work);
++	/* dedicated ordered, high-prio WQ: the inject work sleeps in the
++	 * firmware ioctl, so keep it off system_wq. NULL falls back to
++	 * system_wq in dhd_nexmon_mon_tx, so injection still works. */
++	dhd->nexmon_inj_wq = alloc_ordered_workqueue("dhd_nexmon_inj",
++		WQ_HIGHPRI);
+ #endif /* WL_MONITOR */
+
+ 	dhd->unit = dhd_found + instance_base; /* do not increment dhd_found, yet */
+@@ -13874,8 +13879,13 @@ void dhd_detach(dhd_pub_t *dhdp)
+ #ifdef WL_MONITOR
+ 	dhd_del_monitor_if(dhd);
+-	/* stop the nexmon inject worker and drop any parked frames */
+-	cancel_work_sync(&dhd->nexmon_inj_w);
++	/* stop the nexmon inject worker and drop any parked frames.
++	 * destroy_workqueue() flushes + cancels pending work before freeing. */
++	if (dhd->nexmon_inj_wq) {
++		destroy_workqueue(dhd->nexmon_inj_wq);
++		dhd->nexmon_inj_wq = NULL;
++	} else {
++		cancel_work_sync(&dhd->nexmon_inj_w);
++	}
+ 	skb_queue_purge(&dhd->nexmon_inj_q);
+ #endif /* WL_MONITOR */
+
+diff --git a/drivers/net/wireless/broadcom/bcmdhd_101_16/dhd_linux_priv.h b/drivers/net/wireless/broadcom/bcmdhd_101_16/dhd_linux_priv.h
+--- a/drivers/net/wireless/broadcom/bcmdhd_101_16/dhd_linux_priv.h
++++ b/drivers/net/wireless/broadcom/bcmdhd_101_16/dhd_linux_priv.h
+@@ -362,6 +362,7 @@ typedef struct dhd_info {
+ 	 * nexmon_inj_work (sleepable). */
+ 	struct sk_buff_head	nexmon_inj_q;
+ 	struct work_struct	nexmon_inj_w;
++	struct workqueue_struct	*nexmon_inj_wq;	/* dedicated inject WQ */
+ #endif /* WL_MONITOR */
+ #if defined(BT_OVER_SDIO)
+     struct mutex bus_user_lock; /* lock for sdio bus apis shared between WLAN & BT */
+--
+2.43.0
