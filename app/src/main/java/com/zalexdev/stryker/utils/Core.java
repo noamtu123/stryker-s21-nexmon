@@ -982,8 +982,31 @@ public class Core {
         }
     }
 
+    private static final int ROOT_CHECK_ATTEMPTS = 3;
+    private static final long ROOT_CHECK_RETRY_MS = 1200L;
+
+    /**
+     * Root check tolerant of managers that grant without an interactive prompt
+     * (KernelSU / KernelSU-Next / APatch): a freshly installed app is denied su
+     * until the user toggles it on in the manager — there is no Magisk-style
+     * popup. We retry a few times so a grant made while this screen is up is
+     * picked up without a reinstall. If su cannot be spawned at all (no binary),
+     * there is no root solution to wait for, so we stop early.
+     */
     public boolean checkRoot(){
-        return contains(customCommand("id"),"uid=0");
+        for (int attempt = 0; attempt < ROOT_CHECK_ATTEMPTS; attempt++) {
+            if (contains(customCommand("id"), "uid=0")) return true;
+            if (suSpawnFailed()) return false;
+            if (attempt + 1 < ROOT_CHECK_ATTEMPTS) {
+                try {
+                    Thread.sleep(ROOT_CHECK_RETRY_MS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+        return false;
     }
 
 
