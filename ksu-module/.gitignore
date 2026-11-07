@@ -1,0 +1,4 @@
+# Build artifacts (added by build.sh)
+system/bin/
+stryker.apk
+*.zip

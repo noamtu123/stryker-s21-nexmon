@@ -1,0 +1,6 @@
+id=stryker_s21_backend
+name=Stryker S21 Nexmon Backend
+version=v1.0.0
+versionCode=1
+author=noamtu123
+description=Native aircrack-ng + wireless_tools backend and launcher for the Stryker S21 fork (Exynos 2100, Floppy kernel Nexmon). Supplies native wireless tools in system/bin, installs/updates the fork app, and launches it from the Action button. Does NOT change SELinux or remount firmware (bcm_mon_boot keeps doing that).
