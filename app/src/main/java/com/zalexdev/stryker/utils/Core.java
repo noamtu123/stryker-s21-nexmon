@@ -1451,6 +1451,12 @@ public class Core {
         return preferences.getBoolean("internal_deauth", true);
     }
 
+    /** Whether to turn Android Wi-Fi off automatically when the app opens
+     *  (default on, matching the original behaviour). */
+    public boolean isDisableWifiOnOpen(){
+        return preferences.getBoolean("disable_wifi_on_open", true);
+    }
+
     public String wpsIfaceDownFlag(){
         return isPixieIfaceDown() ? " --iface-down" : "";
     }
