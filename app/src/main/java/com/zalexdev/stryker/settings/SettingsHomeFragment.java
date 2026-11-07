@@ -63,6 +63,7 @@ public class SettingsHomeFragment extends Fragment {
         SwitchMaterial hide = view.findViewById(R.id.hide);
         SwitchMaterial autoScan = view.findViewById(R.id.autoscan_switch);
         SwitchMaterial autoWifi = view.findViewById(R.id.autowifi_switch);
+        SwitchMaterial disableWifi = view.findViewById(R.id.disable_wifi_switch);
         SwitchMaterial promo = view.findViewById(R.id.promo_switch);
         SwitchMaterial autoBanner = view.findViewById(R.id.banner_detect);
         SwitchMaterial pixieIfaceDown = view.findViewById(R.id.pixie_iface_down_switch);
@@ -75,6 +76,7 @@ public class SettingsHomeFragment extends Fragment {
         View internalDeauthDivider = view.findViewById(R.id.internal_deauth_divider);
         SwitchMaterial internalDeauth = view.findViewById(R.id.internal_deauth_switch);
         LinearLayout autoWifiRow = view.findViewById(R.id.autowifi_row);
+        LinearLayout disableWifiRow = view.findViewById(R.id.disable_wifi_row);
         LinearLayout promoRow = view.findViewById(R.id.promo_row);
         LinearLayout saveApsRow = view.findViewById(R.id.save_aps_row);
         LinearLayout autoScanRow = view.findViewById(R.id.autoscan_row);
@@ -115,6 +117,9 @@ public class SettingsHomeFragment extends Fragment {
                 com.zalexdev.stryker.utils.PromoDialogs.KEY_MUTED, !b));
         bindRowToSwitch(promoRow, promo);
         bindRowToSwitch(autoWifiRow, autoWifi);
+        disableWifi.setChecked(core.isDisableWifiOnOpen());
+        disableWifi.setOnCheckedChangeListener((btn, b) -> core.putBoolean("disable_wifi_on_open", b));
+        bindRowToSwitch(disableWifiRow, disableWifi);
         bindRowToSwitch(saveApsRow, saveAps);
         bindRowToSwitch(pixieIfaceDownRow, pixieIfaceDown);
         wpsOse.setChecked(core.wpsEngineIsOse());

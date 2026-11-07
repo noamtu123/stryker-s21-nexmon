@@ -160,6 +160,8 @@
 
     <string name="settings_autowifi_title">Auto-enable WiFi</string>
     <string name="settings_autowifi_subtitle">Turn Android Wi-Fi back on after attacks</string>
+    <string name="settings_disable_wifi_title">Disable Wi-Fi on open</string>
+    <string name="settings_disable_wifi_subtitle">Turn Android Wi-Fi off automatically when the app opens, so the internal radio is free for attacks</string>
 
     <string name="settings_save_aps_title">Save cracked credentials</string>
     <string name="settings_save_aps_subtitle">Store recovered PSKs and PINs in encrypted history</string>

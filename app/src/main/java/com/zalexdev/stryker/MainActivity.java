@@ -111,7 +111,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         core = new Core(this);
-        if (savedInstanceState == null) {
+        if (savedInstanceState == null && core.isDisableWifiOnOpen()) {
             new Thread(() -> {
                 ArrayList<String> before = core.customCommand("settings get global wifi_on", true);
                 android.content.SharedPreferences recovery = getSharedPreferences("monitor_recovery", Context.MODE_PRIVATE);
